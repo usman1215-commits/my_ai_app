@@ -147,22 +147,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 24),
 
                       // ── Weather card + Date card row ────────────
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: _WeatherCard(
-                            temperature: widget.weatherTemperature,
-                            condition: widget.weatherCondition,
-                            description: widget.weatherDescription,
-                            location: widget.locationText,
-                          )),
-                          const SizedBox(width: 12),
-                          _DateCard(
-                            day: now.day.toString(),
-                            month: monthNames[now.month - 1],
-                            onAddTap: _onAddDate,
-                          ),
-                        ],
+                      // Wrapped in IntrinsicHeight because this Row uses
+                      // CrossAxisAlignment.stretch while sitting inside a
+                      // Column/SingleChildScrollView (unbounded height) —
+                      // without it, stretch tries to fill infinite height
+                      // and crashes with "BoxConstraints forces an
+                      // infinite height".
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: _WeatherCard(
+                              temperature: widget.weatherTemperature,
+                              condition: widget.weatherCondition,
+                              description: widget.weatherDescription,
+                              location: widget.locationText,
+                            )),
+                            const SizedBox(width: 12),
+                            _DateCard(
+                              day: now.day.toString(),
+                              month: monthNames[now.month - 1],
+                              onAddTap: _onAddDate,
+                            ),
+                          ],
+                        ),
                       ),
 
                       const SizedBox(height: 28),
@@ -270,6 +278,7 @@ class _WeatherCard extends StatelessWidget {
       decoration: BoxDecoration(color: kFieldColor, borderRadius: BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,6 +332,7 @@ class _DateCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(color: kFieldColor, borderRadius: BorderRadius.circular(20)),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(day, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700)),
           Text(month, style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
