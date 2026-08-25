@@ -1,9 +1,15 @@
+import 'dart:typed_data';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../screens/ozzi_widgets.dart';
 import 'profile_models.dart';
 
 /// Edit Profile — update avatar/name/username/bio.
-/// FRONTEND ONLY — wire up real image picker + save API where marked.
+/// FRONTEND ONLY — tapping the camera badge opens the device photo
+/// picker right away to choose a new avatar. Wire up the real
+/// upload/save API where marked.
 class EditProfileScreen extends StatefulWidget {
   final UserProfile profile;
 
@@ -20,6 +26,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _errorMessage;
   bool _isSaving = false;
 
+  PlatformFile? _pickedAvatar;
+
   @override
   void initState() {
     super.initState();
@@ -34,6 +42,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _usernameController.dispose();
     _bioController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAvatar() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: kIsWeb,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    // TODO: upload the picked avatar to your real backend/storage
+    // once _save() is called, then use the returned URL for the
+    // profile's avatarUrl instead of showing it locally like below.
+    setState(() => _pickedAvatar = result.files.first);
   }
 
   Future<void> _save() async {
@@ -55,6 +76,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!mounted) return;
     setState(() => _isSaving = false);
     Navigator.of(context).pop();
+  }
+
+  Widget _buildAvatar() {
+    final bytes = _pickedAvatar?.bytes;
+    final path = _pickedAvatar?.path;
+
+    if (bytes != null) {
+      return CircleAvatar(radius: 48, backgroundColor: kFieldColor, backgroundImage: MemoryImage(bytes as Uint8List));
+    }
+    if (!kIsWeb && path != null) {
+      return CircleAvatar(radius: 48, backgroundColor: kFieldColor, backgroundImage: FileImage(File(path)));
+    }
+    return CircleAvatar(
+      radius: 48,
+      backgroundColor: kFieldColor,
+      backgroundImage: widget.profile.avatarUrl != null ? NetworkImage(widget.profile.avatarUrl!) : null,
+      child: widget.profile.avatarUrl == null ? const Icon(Icons.person, color: Colors.white54, size: 44) : null,
+    );
   }
 
   @override
@@ -87,18 +126,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 Center(
                   child: Stack(
                     children: [
-                      CircleAvatar(
-                        radius: 48,
-                        backgroundColor: kFieldColor,
-                        backgroundImage: widget.profile.avatarUrl != null ? NetworkImage(widget.profile.avatarUrl!) : null,
-                        child: widget.profile.avatarUrl == null ? const Icon(Icons.person, color: Colors.white54, size: 44) : null,
-                      ),
+                      _buildAvatar(),
                       Positioned(
                         right: 0, bottom: 0,
                         child: GestureDetector(
-                          onTap: () {
-                            // TODO: open real image picker, upload new avatar.
-                          },
+                          onTap: _pickAvatar,
                           child: Container(
                             width: 32, height: 32,
                             decoration: BoxDecoration(color: kRedColor, shape: BoxShape.circle, border: Border.all(color: kBackgroundColor, width: 2)),

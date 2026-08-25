@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../screens/ozzi_widgets.dart';
 
@@ -7,7 +8,11 @@ enum VoiceState { idle, listening, thinking, speaking }
 /// FRONTEND ONLY — the orb animates continuously and [state] just
 /// changes its color/behavior for show. Wire up real speech-to-text /
 /// AI response / text-to-speech logic wherever the // TODO comments
-/// are, and drive [state] from that instead of the demo cycling below.
+/// are, and drive [state] from that instead of the demo auto-cycle
+/// below. No manual mic button — this screen auto-listens, and you
+/// should call [_setState]-style transitions from your real
+/// speech-detection callbacks (e.g. "user started talking" ->
+/// listening, "user stopped talking" -> thinking -> speaking).
 class VoiceChatScreen extends StatefulWidget {
   const VoiceChatScreen({super.key});
 
@@ -18,6 +23,7 @@ class VoiceChatScreen extends StatefulWidget {
 class _VoiceChatScreenState extends State<VoiceChatScreen> with TickerProviderStateMixin {
   late final AnimationController _pulseController;
   late final AnimationController _rotateController;
+  late final AnimationController _smokeController;
   VoiceState _state = VoiceState.idle;
 
   @override
@@ -30,28 +36,54 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> with TickerProviderSt
 
     _rotateController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 12),
+      duration: const Duration(seconds: 18),
     )..repeat();
+
+    _smokeController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 7),
+    )..repeat();
+
+    // TODO: replace this whole demo auto-cycle with real hooks:
+    //   - speech-to-text "onSpeechStart"  -> setState(() => _state = VoiceState.listening)
+    //   - speech-to-text "onSpeechEnd"    -> setState(() => _state = VoiceState.thinking)
+    //   - AI response ready               -> setState(() => _state = VoiceState.speaking)
+    //   - TTS playback finished           -> setState(() => _state = VoiceState.idle/listening)
+    // Below just cycles automatically so the screen has no manual
+    // button and always looks "alive" listening on its own.
+    _startAutoCycle();
+  }
+
+  Future<void> _startAutoCycle() async {
+    while (mounted) {
+      await Future.delayed(const Duration(seconds: 4));
+      if (!mounted) return;
+      setState(() {
+        switch (_state) {
+          case VoiceState.idle:
+          case VoiceState.listening:
+            _state = VoiceState.thinking;
+          case VoiceState.thinking:
+            _state = VoiceState.speaking;
+          case VoiceState.speaking:
+            _state = VoiceState.listening;
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _rotateController.dispose();
+    _smokeController.dispose();
     super.dispose();
-  }
-
-  void _toggleListening() {
-    // TODO: replace with real mic / speech-to-text trigger.
-    setState(() {
-      _state = _state == VoiceState.listening ? VoiceState.idle : VoiceState.listening;
-    });
   }
 
   String get _statusText {
     switch (_state) {
       case VoiceState.idle:
-        return 'Tap to speak';
+        return 'Listening...';
       case VoiceState.listening:
         return 'Listening...';
       case VoiceState.thinking:
@@ -70,47 +102,29 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> with TickerProviderSt
         child: SafeArea(
           child: Stack(
             children: [
-              Positioned(
+              const Positioned(
                 top: 8,
                 left: 20,
-                child: const OzziBackButton(),
+                child: OzziBackButton(),
               ),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(),
-                  _buildOrb(),
-                  const SizedBox(height: 40),
-                  Text(
-                    _statusText,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 40),
-                    child: GestureDetector(
-                      onTap: _toggleListening,
-                      child: Container(
-                        width: 68,
-                        height: 68,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _state == VoiceState.listening ? kRedColor : kFieldColor,
-                        ),
-                        child: Icon(
-                          _state == VoiceState.listening ? Icons.stop_rounded : Icons.mic_none_rounded,
-                          color: Colors.white,
-                          size: 30,
-                        ),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildOrb(),
+                    const SizedBox(height: 40),
+                    Text(
+                      _statusText,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.3,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -121,10 +135,12 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> with TickerProviderSt
 
   Widget _buildOrb() {
     return AnimatedBuilder(
-      animation: Listenable.merge([_pulseController, _rotateController]),
+      animation: Listenable.merge([_pulseController, _rotateController, _smokeController]),
       builder: (context, child) {
         final pulse = 0.9 + (_pulseController.value * 0.15); // breathing scale
         final glow = 0.35 + (_pulseController.value * 0.25);
+        final smokeAngle = _smokeController.value * 2 * pi;
+        final smokeAngle2 = (_smokeController.value * 2 * pi * -0.7) + pi / 3;
 
         return SizedBox(
           width: 260,
@@ -148,44 +164,78 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> with TickerProviderSt
                 ),
               ),
 
-              // Rotating swirl gradient sphere (matches the reference orb).
-              Transform.scale(
-                scale: pulse,
-                child: Transform.rotate(
-                  angle: _rotateController.value * 2 * pi,
-                  child: Container(
+              // Smoky drifting core — layered blurred gradients that
+              // rotate at different speeds/directions to read as
+              // smoke rather than a hard swirl.
+              ClipOval(
+                child: Transform.scale(
+                  scale: pulse,
+                  child: SizedBox(
                     width: 200,
                     height: 200,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: SweepGradient(
-                        colors: [
-                          Color(0xFF6C7BFF),
-                          Color(0xFFFFFFFF),
-                          Color(0xFFB8C2FF),
-                          Color(0xFF6C7BFF),
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Transform.rotate(
+                            angle: smokeAngle,
+                            child: Container(
+                              width: 200,
+                              height: 200,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: SweepGradient(
+                                  colors: [
+                                    _orbGlowColor.withValues(alpha: 0.0),
+                                    _orbGlowColor.withValues(alpha: 0.55),
+                                    Colors.white.withValues(alpha: 0.35),
+                                    _orbGlowColor.withValues(alpha: 0.0),
+                                  ],
+                                  stops: const [0.0, 0.3, 0.55, 1.0],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Transform.rotate(
+                            angle: smokeAngle2,
+                            child: Container(
+                              width: 170,
+                              height: 170,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: SweepGradient(
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.0),
+                                    const Color(0xFFB8C2FF).withValues(alpha: 0.4),
+                                    Colors.white.withValues(alpha: 0.0),
+                                  ],
+                                  stops: const [0.0, 0.5, 1.0],
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
-                        stops: [0.0, 0.35, 0.7, 1.0],
                       ),
                     ),
                   ),
                 ),
               ),
 
-              // Inner radial highlight for a glossy, 3D sphere feel.
+              // Inner radial highlight for a glossy, soft-core feel.
               Transform.scale(
                 scale: pulse,
                 child: Container(
                   width: 200,
                   height: 200,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
-                      center: Alignment(-0.3, -0.4),
+                      center: const Alignment(-0.2, -0.3),
                       radius: 0.9,
                       colors: [
-                        Color(0xCCFFFFFF),
-                        Color(0x00FFFFFF),
+                        Colors.white.withValues(alpha: 0.5),
+                        Colors.white.withValues(alpha: 0.0),
                       ],
                     ),
                   ),

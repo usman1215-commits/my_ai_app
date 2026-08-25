@@ -65,7 +65,7 @@ class _MainShellState extends State<MainShell> {
         return const OzziScreen();
 
       case 2:
-        return const MessagesHomeScreen();
+        return MessagesHomeScreen();
 
       case 3:
         return const NotesHomeScreen();
